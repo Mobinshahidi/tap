@@ -4,6 +4,8 @@ plugins {
     jacoco
 }
 
+import java.util.Base64
+
 android {
     namespace = "com.tap.apk"
     compileSdk = 34
@@ -24,7 +26,7 @@ android {
 
     if (useReleaseSigning) {
         keystoreFile.parentFile.mkdirs()
-        keystoreFile.writeBytes(java.util.Base64.getDecoder().decode(keystoreBase64))
+        keystoreFile.writeBytes(Base64.getDecoder().decode(keystoreBase64))
     }
 
     signingConfigs {
@@ -91,16 +93,18 @@ tasks.register<org.gradle.testing.jacoco.tasks.JacocoReport>("jacocoTestReport")
 
     val fileFilter = listOf("**/R.class", "**/R$*.class", "**/BuildConfig.*", "**/Manifest*.*")
 
-    val kotlinClasses = fileTree("$buildDir/tmp/kotlin-classes/debug") {
+    val buildDirPath = layout.buildDirectory.get().asFile.absolutePath
+
+    val kotlinClasses = fileTree("$buildDirPath/tmp/kotlin-classes/debug") {
         exclude(fileFilter)
     }
-    val javaClasses = fileTree("$buildDir/intermediates/javac/debug/classes") {
+    val javaClasses = fileTree("$buildDirPath/intermediates/javac/debug/classes") {
         exclude(fileFilter)
     }
 
     classDirectories.setFrom(files(kotlinClasses, javaClasses))
     sourceDirectories.setFrom(files("src/main/kotlin"))
-    executionData.setFrom(files("$buildDir/jacoco/testDebugUnitTest.exec"))
+    executionData.setFrom(files("$buildDirPath/jacoco/testDebugUnitTest.exec"))
 }
 
 dependencies {
