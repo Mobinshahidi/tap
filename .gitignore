@@ -1,0 +1,12 @@
+.gradle/
+build/
+**/build/
+local.properties
+.idea/
+*.iml
+captures/
+*.keystore
+*.jks
+*.apk
+*.aab
+*.log
