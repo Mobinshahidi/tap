@@ -20,6 +20,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
@@ -41,10 +42,16 @@ import com.tap.apk.models.TapEvent
 import com.tap.apk.models.TapPatternConfig
 import kotlinx.coroutines.launch
 
+data class AppOption(
+    val label: String,
+    val packageName: String,
+)
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TapSettingsScreen(
     settings: Map<TapEvent, TapPatternConfig>,
+    appOptions: List<AppOption>,
     onSave: (TapEvent, TapPatternConfig) -> Unit,
     onTest: (TapEvent) -> Unit,
 ) {
@@ -73,7 +80,7 @@ fun TapSettingsScreen(
         ) { page ->
             val event = tabs[page]
             val config = settings[event] ?: TapPatternConfig()
-            PatternCard(event, config, onSave, onTest)
+            PatternCard(event, config, appOptions, onSave, onTest)
         }
     }
 }
@@ -82,6 +89,7 @@ fun TapSettingsScreen(
 private fun PatternCard(
     event: TapEvent,
     config: TapPatternConfig,
+    appOptions: List<AppOption>,
     onSave: (TapEvent, TapPatternConfig) -> Unit,
     onTest: (TapEvent) -> Unit,
 ) {
@@ -97,10 +105,17 @@ private fun PatternCard(
             }
         )
     }
-    var packageOrCommand by remember(config) {
+    var selectedPackage by remember(config) {
         mutableStateOf(
             when (val action = config.action) {
                 is TapAction.LaunchApp -> action.packageName
+                else -> ""
+            }
+        )
+    }
+    var termuxCommand by remember(config) {
+        mutableStateOf(
+            when (val action = config.action) {
                 is TapAction.Termux -> action.command
                 else -> ""
             }
@@ -112,11 +127,11 @@ private fun PatternCard(
         )
     }
 
-    LaunchedEffect(enabled, cooldown, actionType, packageOrCommand, flashMode) {
+    LaunchedEffect(enabled, cooldown, actionType, selectedPackage, termuxCommand, flashMode) {
         val action = when (actionType) {
             "Flashlight" -> TapAction.Flashlight(flashMode)
-            "Open App" -> TapAction.LaunchApp(packageOrCommand.trim())
-            "Termux Command" -> TapAction.Termux(packageOrCommand.trim())
+            "Open App" -> if (selectedPackage.isBlank()) TapAction.None else TapAction.LaunchApp(selectedPackage.trim())
+            "Termux Command" -> if (termuxCommand.isBlank()) TapAction.None else TapAction.Termux(termuxCommand.trim())
             else -> TapAction.None
         }
         onSave(event, TapPatternConfig(enabled, (cooldown * 1000f).toLong(), action))
@@ -140,14 +155,21 @@ private fun PatternCard(
                 FlashModeDropdown(flashMode) { flashMode = it }
             }
 
-            if (actionType == "Open App" || actionType == "Termux Command") {
+            if (actionType == "Open App") {
+                AppSelector(
+                    value = selectedPackage,
+                    appOptions = appOptions,
+                    onSelect = { selectedPackage = it },
+                )
+            }
+
+            if (actionType == "Termux Command") {
                 OutlinedTextField(
-                    value = packageOrCommand,
-                    onValueChange = { packageOrCommand = it },
+                    value = termuxCommand,
+                    onValueChange = { termuxCommand = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = {
-                        Text(if (actionType == "Open App") "Package Name" else "Command")
-                    }
+                    label = { Text("Command") },
+                    colors = fieldColors(),
                 )
             }
 
@@ -196,6 +218,7 @@ private fun ActionDropdown(value: String, onSelect: (String) -> Unit) {
             modifier = Modifier
                 .menuAnchor()
                 .fillMaxWidth(),
+            colors = fieldColors(),
         )
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { item ->
@@ -227,6 +250,7 @@ private fun FlashModeDropdown(value: FlashMode, onSelect: (FlashMode) -> Unit) {
             modifier = Modifier
                 .menuAnchor()
                 .fillMaxWidth(),
+            colors = fieldColors(),
         )
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { item ->
@@ -241,3 +265,49 @@ private fun FlashModeDropdown(value: FlashMode, onSelect: (FlashMode) -> Unit) {
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppSelector(
+    value: String,
+    appOptions: List<AppOption>,
+    onSelect: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = appOptions.firstOrNull { it.packageName == value }?.label ?: value
+
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+        OutlinedTextField(
+            value = selectedLabel,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("App") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth(),
+            colors = fieldColors(),
+        )
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            appOptions.forEach { item ->
+                DropdownMenuItem(
+                    text = { Text(item.label) },
+                    onClick = {
+                        onSelect(item.packageName)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun fieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = Color(0xFFD57455),
+    unfocusedBorderColor = Color(0xFF1E1E1D).copy(alpha = 0.65f),
+    focusedLabelColor = Color(0xFFD57455),
+    unfocusedLabelColor = Color(0xFF1E1E1D).copy(alpha = 0.65f),
+    focusedTextColor = Color(0xFF1E1E1D),
+    unfocusedTextColor = Color(0xFF1E1E1D),
+)

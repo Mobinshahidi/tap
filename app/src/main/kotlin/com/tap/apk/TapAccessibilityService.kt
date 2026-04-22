@@ -26,12 +26,17 @@ class TapAccessibilityService : AccessibilityService(), SensorEventListener {
     private lateinit var store: TapSettingsDataStore
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    private var accelMag = 0f
+    private var accelDelta = 0f
+    private var accelBaseline = 0f
     private var gyroMag = 0f
     private var lastSampleMs = 0L
     private var lastPeakMs = 0L
+    private var consecutiveMotionSamples = 0
     private val samplePeriodMs = 20L
-    private val peakThreshold = 2.2f
+    private val peakThreshold = 2.5f
+    private val gyroscopeWeight = 0.85f
+    private val motionGateThreshold = 0.45f
+    private val steadyAlpha = 0.92f
 
     private val handler = Handler(Looper.getMainLooper())
     private val flushTask = object : Runnable {
@@ -67,7 +72,9 @@ class TapAccessibilityService : AccessibilityService(), SensorEventListener {
 
         when (event.sensor.type) {
             Sensor.TYPE_ACCELEROMETER -> {
-                accelMag = magnitude(event.values[0], event.values[1], event.values[2]) - SensorManager.GRAVITY_EARTH
+                val rawAccel = magnitude(event.values[0], event.values[1], event.values[2]) - SensorManager.GRAVITY_EARTH
+                accelBaseline = (accelBaseline * steadyAlpha) + (rawAccel * (1f - steadyAlpha))
+                accelDelta = rawAccel - accelBaseline
             }
 
             Sensor.TYPE_GYROSCOPE -> {
@@ -75,7 +82,16 @@ class TapAccessibilityService : AccessibilityService(), SensorEventListener {
             }
         }
 
-        val composite = abs(accelMag) + (gyroMag * 0.6f)
+        val motionSignal = abs(accelDelta) + (gyroMag * 0.35f)
+        if (motionSignal >= motionGateThreshold) {
+            consecutiveMotionSamples = (consecutiveMotionSamples + 1).coerceAtMost(10)
+        } else {
+            consecutiveMotionSamples = 0
+        }
+
+        if (consecutiveMotionSamples < 2) return
+
+        val composite = (abs(accelDelta) * 0.95f) + (gyroMag * gyroscopeWeight)
         if (composite >= peakThreshold && nowMs - lastPeakMs > 100L) {
             lastPeakMs = nowMs
             detector.onTapPeak(nowMs)

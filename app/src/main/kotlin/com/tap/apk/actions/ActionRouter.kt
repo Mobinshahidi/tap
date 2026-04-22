@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraManager
+import android.os.Build
 import android.os.SystemClock
 import com.tap.apk.models.FlashMode
 import com.tap.apk.models.TapAction
@@ -63,17 +64,26 @@ class ActionRouter(private val context: Context) {
             putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/sh")
             putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arrayOf("-c", command))
             putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
+            putExtra("com.termux.RUN_COMMAND_WORKDIR", "/data/data/com.termux/files/home")
+            putExtra("com.termux.RUN_COMMAND_SESSION_ACTION", "0")
         }
         runCatching {
-            context.startService(intent)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
         }.onFailure {
             val fallback = Intent("com.termux.app.RUN_COMMAND").apply {
                 putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/sh")
                 putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arrayOf("-c", command))
                 putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
+                putExtra("com.termux.RUN_COMMAND_WORKDIR", "/data/data/com.termux/files/home")
+                putExtra("com.termux.RUN_COMMAND_SESSION_ACTION", "0")
                 `package` = "com.termux"
             }
-            runCatching { context.sendBroadcast(fallback) }
+            runCatching { context.startService(fallback) }
+                .recoverCatching { context.sendBroadcast(fallback) }
         }
     }
 }
