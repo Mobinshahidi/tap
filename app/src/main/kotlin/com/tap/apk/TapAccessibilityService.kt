@@ -26,17 +26,24 @@ class TapAccessibilityService : AccessibilityService(), SensorEventListener {
     private lateinit var store: TapSettingsDataStore
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    private var accelDelta = 0f
-    private var accelBaseline = 0f
-    private var gyroMag = 0f
+    private var gravityX = 0f
+    private var gravityY = 0f
+    private var gravityZ = 0f
+    private var linearX = 0f
+    private var linearY = 0f
+    private var linearZ = 0f
+    private var gyroX = 0f
+    private var gyroY = 0f
+    private var gyroZ = 0f
     private var lastSampleMs = 0L
     private var lastPeakMs = 0L
-    private var consecutiveMotionSamples = 0
+    private var lowMotionSamples = 0
     private val samplePeriodMs = 20L
-    private val peakThreshold = 2.5f
-    private val gyroscopeWeight = 0.85f
-    private val motionGateThreshold = 0.45f
-    private val steadyAlpha = 0.92f
+    private val gravityAlpha = 0.85f
+    private val motionNoiseThreshold = 0.6f
+    private val minSpikeThreshold = 3.2f
+    private val maxRotationRate = 1.7f
+    private val minQuietSamples = 4
 
     private val handler = Handler(Looper.getMainLooper())
     private val flushTask = object : Runnable {
@@ -72,29 +79,41 @@ class TapAccessibilityService : AccessibilityService(), SensorEventListener {
 
         when (event.sensor.type) {
             Sensor.TYPE_ACCELEROMETER -> {
-                val rawAccel = magnitude(event.values[0], event.values[1], event.values[2]) - SensorManager.GRAVITY_EARTH
-                accelBaseline = (accelBaseline * steadyAlpha) + (rawAccel * (1f - steadyAlpha))
-                accelDelta = rawAccel - accelBaseline
+                gravityX = (gravityAlpha * gravityX) + ((1f - gravityAlpha) * event.values[0])
+                gravityY = (gravityAlpha * gravityY) + ((1f - gravityAlpha) * event.values[1])
+                gravityZ = (gravityAlpha * gravityZ) + ((1f - gravityAlpha) * event.values[2])
+
+                linearX = event.values[0] - gravityX
+                linearY = event.values[1] - gravityY
+                linearZ = event.values[2] - gravityZ
             }
 
             Sensor.TYPE_GYROSCOPE -> {
-                gyroMag = magnitude(event.values[0], event.values[1], event.values[2])
+                gyroX = event.values[0]
+                gyroY = event.values[1]
+                gyroZ = event.values[2]
             }
         }
 
-        val motionSignal = abs(accelDelta) + (gyroMag * 0.35f)
-        if (motionSignal >= motionGateThreshold) {
-            consecutiveMotionSamples = (consecutiveMotionSamples + 1).coerceAtMost(10)
+        val linearMagnitude = magnitude(linearX, linearY, linearZ)
+        val rotationMagnitude = magnitude(gyroX, gyroY, gyroZ)
+        val zImpact = abs(linearZ)
+        val xyImpact = abs(linearX) + abs(linearY)
+
+        if (linearMagnitude < motionNoiseThreshold) {
+            lowMotionSamples = (lowMotionSamples + 1).coerceAtMost(20)
         } else {
-            consecutiveMotionSamples = 0
+            lowMotionSamples = 0
         }
 
-        if (consecutiveMotionSamples < 2) return
+        if (lowMotionSamples < minQuietSamples) return
+        if (rotationMagnitude > maxRotationRate) return
 
-        val composite = (abs(accelDelta) * 0.95f) + (gyroMag * gyroscopeWeight)
-        if (composite >= peakThreshold && nowMs - lastPeakMs > 100L) {
+        val spike = (zImpact * 1.25f) + (xyImpact * 0.35f)
+        if (spike >= minSpikeThreshold && nowMs - lastPeakMs > 120L) {
             lastPeakMs = nowMs
             detector.onTapPeak(nowMs)
+            lowMotionSamples = 0
         }
     }
 

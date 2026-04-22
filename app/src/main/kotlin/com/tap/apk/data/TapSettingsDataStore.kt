@@ -75,8 +75,8 @@ class TapSettingsDataStore(private val context: Context) {
 
         val action = when (actionType) {
             "flashlight" -> TapAction.Flashlight(mode = runCatching { FlashMode.valueOf(mode) }.getOrDefault(FlashMode.Toggle))
-            "launch_app" -> if (value.isBlank()) TapAction.None else TapAction.LaunchApp(value)
-            "termux" -> if (value.isBlank()) TapAction.None else TapAction.Termux(value)
+            "launch_app" -> TapAction.LaunchApp(value)
+            "termux" -> TapAction.Termux(value)
             else -> TapAction.None
         }
         return TapPatternConfig(enabled = enabled, cooldownMs = cooldownMs, action = action)

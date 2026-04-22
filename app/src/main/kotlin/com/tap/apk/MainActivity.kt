@@ -3,6 +3,8 @@ package com.tap.apk
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -81,7 +83,13 @@ class MainActivity : ComponentActivity() {
 
     private fun loadLaunchableApps(): List<AppOption> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        return packageManager.queryIntentActivities(intent, 0)
+        val matches: List<ResolveInfo> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(0))
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.queryIntentActivities(intent, 0)
+        }
+        return matches
             .map {
                 val packageName = it.activityInfo.packageName
                 val label = it.loadLabel(packageManager)?.toString()?.trim().orEmpty()

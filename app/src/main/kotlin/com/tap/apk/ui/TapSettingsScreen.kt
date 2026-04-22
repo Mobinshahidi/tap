@@ -130,8 +130,8 @@ private fun PatternCard(
     LaunchedEffect(enabled, cooldown, actionType, selectedPackage, termuxCommand, flashMode) {
         val action = when (actionType) {
             "Flashlight" -> TapAction.Flashlight(flashMode)
-            "Open App" -> if (selectedPackage.isBlank()) TapAction.None else TapAction.LaunchApp(selectedPackage.trim())
-            "Termux Command" -> if (termuxCommand.isBlank()) TapAction.None else TapAction.Termux(termuxCommand.trim())
+            "Open App" -> TapAction.LaunchApp(selectedPackage.trim())
+            "Termux Command" -> TapAction.Termux(termuxCommand.trim())
             else -> TapAction.None
         }
         onSave(event, TapPatternConfig(enabled, (cooldown * 1000f).toLong(), action))
@@ -274,7 +274,8 @@ private fun AppSelector(
     onSelect: (String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val selectedLabel = appOptions.firstOrNull { it.packageName == value }?.label ?: value
+    val selectedLabel = appOptions.firstOrNull { it.packageName == value }?.label
+        ?: if (value.isBlank()) "Select an app" else value
 
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
         OutlinedTextField(
@@ -289,14 +290,21 @@ private fun AppSelector(
             colors = fieldColors(),
         )
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            appOptions.forEach { item ->
+            if (appOptions.isEmpty()) {
                 DropdownMenuItem(
-                    text = { Text(item.label) },
-                    onClick = {
-                        onSelect(item.packageName)
-                        expanded = false
-                    }
+                    text = { Text("No launchable apps found") },
+                    onClick = { expanded = false }
                 )
+            } else {
+                appOptions.forEach { item ->
+                    DropdownMenuItem(
+                        text = { Text(item.label) },
+                        onClick = {
+                            onSelect(item.packageName)
+                            expanded = false
+                        }
+                    )
+                }
             }
         }
     }
