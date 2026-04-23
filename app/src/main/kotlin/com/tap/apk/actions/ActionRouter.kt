@@ -52,9 +52,12 @@ class ActionRouter(private val context: Context) {
 
     private fun launchPackage(packageName: String) {
         if (packageName.isBlank()) return
-        val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
+            ?: Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = android.net.Uri.parse("package:$packageName")
+            }
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(launchIntent)
+        runCatching { context.startActivity(launchIntent) }
     }
 
     private fun runTermux(command: String) {

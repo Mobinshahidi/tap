@@ -2,8 +2,8 @@ package com.tap.apk
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
-import android.content.pm.ResolveInfo
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             TapTheme {
-                val appOptions = remember { loadLaunchableApps() }
+                val appOptions = remember { loadInstalledApps() }
                 val settings by dataStore.settingsFlow.collectAsState(
                     initial = mapOf(
                         TapEvent.Single to TapPatternConfig(),
@@ -81,23 +81,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun loadLaunchableApps(): List<AppOption> {
-        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val matches: List<ResolveInfo> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            packageManager.queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(0))
+    private fun loadInstalledApps(): List<AppOption> {
+        val installedApps: List<ApplicationInfo> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0))
         } else {
             @Suppress("DEPRECATION")
-            packageManager.queryIntentActivities(intent, 0)
+            packageManager.getInstalledApplications(0)
         }
-        return matches
+        return installedApps
             .map {
-                val packageName = it.activityInfo.packageName
-                val label = it.loadLabel(packageManager)?.toString()?.trim().orEmpty()
+                val packageName = it.packageName
+                val label = packageManager.getApplicationLabel(it).toString().trim()
                 val safeLabel = if (label.isBlank()) packageName else label
                 AppOption(safeLabel, packageName)
             }
-            .distinctBy { it.packageName }
             .filterNot { it.packageName == packageName }
+            .distinctBy { it.packageName }
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label })
     }
 }

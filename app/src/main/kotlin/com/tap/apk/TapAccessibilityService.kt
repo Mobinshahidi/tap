@@ -38,12 +38,15 @@ class TapAccessibilityService : AccessibilityService(), SensorEventListener {
     private var lastSampleMs = 0L
     private var lastPeakMs = 0L
     private var lowMotionSamples = 0
+    private var movingAverageSpike = 0f
+    private var movingAverageRotation = 0f
     private val samplePeriodMs = 20L
-    private val gravityAlpha = 0.85f
-    private val motionNoiseThreshold = 0.6f
-    private val minSpikeThreshold = 3.2f
-    private val maxRotationRate = 1.7f
-    private val minQuietSamples = 4
+    private val gravityAlpha = 0.82f
+    private val movingAverageAlpha = 0.88f
+    private val motionNoiseThreshold = 0.45f
+    private val minSpikeThreshold = 1.85f
+    private val maxRotationRate = 2.8f
+    private val minQuietSamples = 2
 
     private val handler = Handler(Looper.getMainLooper())
     private val flushTask = object : Runnable {
@@ -98,7 +101,9 @@ class TapAccessibilityService : AccessibilityService(), SensorEventListener {
         val linearMagnitude = magnitude(linearX, linearY, linearZ)
         val rotationMagnitude = magnitude(gyroX, gyroY, gyroZ)
         val zImpact = abs(linearZ)
-        val xyImpact = abs(linearX) + abs(linearY)
+        val xyImpact = magnitude(linearX, linearY, 0f)
+
+        val hadQuietWindow = lowMotionSamples >= minQuietSamples
 
         if (linearMagnitude < motionNoiseThreshold) {
             lowMotionSamples = (lowMotionSamples + 1).coerceAtMost(20)
@@ -106,11 +111,15 @@ class TapAccessibilityService : AccessibilityService(), SensorEventListener {
             lowMotionSamples = 0
         }
 
-        if (lowMotionSamples < minQuietSamples) return
+        if (!hadQuietWindow) return
         if (rotationMagnitude > maxRotationRate) return
 
-        val spike = (zImpact * 1.25f) + (xyImpact * 0.35f)
-        if (spike >= minSpikeThreshold && nowMs - lastPeakMs > 120L) {
+        val spike = (zImpact * 1.05f) + (xyImpact * 0.28f)
+        movingAverageSpike = (movingAverageSpike * movingAverageAlpha) + (spike * (1f - movingAverageAlpha))
+        movingAverageRotation = (movingAverageRotation * movingAverageAlpha) + (rotationMagnitude * (1f - movingAverageAlpha))
+        val normalizedSpike = spike - movingAverageSpike
+
+        if (normalizedSpike >= minSpikeThreshold && movingAverageRotation < 1.8f && nowMs - lastPeakMs > 95L) {
             lastPeakMs = nowMs
             detector.onTapPeak(nowMs)
             lowMotionSamples = 0
